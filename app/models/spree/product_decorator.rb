@@ -2,7 +2,7 @@ module Spree::ProductDecorator
   def self.prepended(base)
     base.searchkick(
       callbacks: :async,
-      word_start: [:name],
+      word_start: searchkick_fields,
       settings: { number_of_replicas: 0 },
       merge_mappings: true,
       mappings: {
@@ -76,9 +76,7 @@ module Spree::ProductDecorator
 
     json = {
       id: id,
-      name: name,
       slug: slug,
-      description: description,
       active: available?,
       in_stock: in_stock?,
       created_at: created_at,
@@ -91,6 +89,12 @@ module Spree::ProductDecorator
       skus: all_variants.map(&:last),
       total_on_hand: total_on_hand
     }
+     active_locales.each do |locale|
+      translation = translations.find_by(locale: locale)
+      json["name_#{locale}"] = translation&.name
+      json["description_#{locale}"] = translation&.description
+      json["short_description_#{locale}"] = translation&.short_description
+    end
 
     json.merge!(option_types_for_es_index(all_variants))
     json.merge!(properties_for_es_index)
@@ -147,6 +151,24 @@ module Spree::ProductDecorator
 
   def index_data
     {}
+  end
+
+
+  def self.searchkick_fields
+    fields = []
+    locales = Spree::Store.current.supported_locales.split(',').map(&:to_sym) << Spree::Store.current.default_locale.to_sym
+    locales.uniq.each do |locale|
+      fields << :"name_#{locale}"
+      fields << :"description_#{locale}"
+      fields << :"short_description_#{locale}"
+    end
+    fields
+  end
+
+  def active_locales
+    default_locale = Spree::Store.current.default_locale.to_sym
+    supported_locales = Spree::Store.current.supported_locales.split(',').map(&:to_sym)
+    (supported_locales << default_locale).uniq
   end
 end
 
